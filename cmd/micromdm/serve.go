@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/micromdm/micromdm/platform/queue"
 	"io"
 	stdlog "log"
 	"net/http"
@@ -223,6 +224,15 @@ func serve(args []string) error {
 		stdlog.Fatal(err)
 	}
 
+	opts := []queue.Option{queue.WithLogger(logger)}
+	if sm.NoCmdHistory {
+		opts = append(opts, queue.WithoutHistory())
+	}
+	q, err := queue.NewQueue(sm.DB, sm.PubClient, opts...)
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+
 	blueprintWorker := blueprint.NewWorker(
 		bpDB,
 		userDB,
@@ -298,6 +308,10 @@ func serve(args []string) error {
 
 		commandEndpoints := command.MakeServerEndpoints(sm.CommandService, basicAuthEndpointMiddleware)
 		command.RegisterHTTPHandlers(r, commandEndpoints, options...)
+
+		queuesvc := queue.New(q)
+		queueEndpoints := queue.MakeServerEndpoints(queuesvc, basicAuthEndpointMiddleware)
+		queue.RegisterHTTPHandlers(r, queueEndpoints, options...)
 
 		var dc depapi.DEPClient
 		if sm.DEPClient != nil {
